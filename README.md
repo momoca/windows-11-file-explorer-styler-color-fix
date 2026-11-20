@@ -4,6 +4,12 @@
 
 当前版本 **1.7.2.12**，目标为 **Windows 11 x64** 的 `explorer.exe`。本项目提供可在 Windhawk 中编译的[单文件 C++ 源码](windows-11-file-explorer-styler-color-fix.wh.cpp)。
 
+## 演示视频
+
+<video src="https://raw.githubusercontent.com/momoca/windows-11-file-explorer-styler-color-fix/main/media/demo.mp4" controls width="900"></video>
+
+[打开原始视频（36 秒，含声音）](media/demo.mp4)
+
 ## 安装
 
 1. 安装 [Windhawk](https://windhawk.net/)，打开上面的源码文件，使用 GitHub 的 **Download raw file** 下载到本地。
