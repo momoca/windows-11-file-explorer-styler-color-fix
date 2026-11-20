@@ -6,7 +6,7 @@
 
 ## 演示视频
 
-<video src="https://raw.githubusercontent.com/momoca/windows-11-file-explorer-styler-color-fix/main/media/demo.mp4" controls width="900"></video>
+[![资源管理器强调色演示（36 秒循环预览）](media/demo.webp)](media/demo.mp4)
 
 [打开原始视频（36 秒，含声音）](media/demo.mp4)
 
