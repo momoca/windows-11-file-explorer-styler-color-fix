@@ -2,7 +2,7 @@
 
 让 Windows 11 文件资源管理器的窗口背景跟随系统强调色，并让目录树、文件列表和分组标题使用协调的悬停与选中颜色。此 Windhawk Mod 基于 m417z 的 Windows 11 File Explorer Styler 1.7.2，保留上游布局主题和自定义 XAML 样式。
 
-当前版本 **1.7.2.12**，目标为 **Windows 11 x64** 的 `explorer.exe`。本项目提供可在 Windhawk 中编译的[单文件 C++ 源码](windows-11-file-explorer-styler-color-fix.wh.cpp)。
+当前版本 **1.7.2.13**，目标为 **Windows 11 x64** 的 `explorer.exe`。本项目提供可在 Windhawk 中编译的[单文件 C++ 源码](windows-11-file-explorer-styler-color-fix.wh.cpp)。
 
 ## 演示视频
 

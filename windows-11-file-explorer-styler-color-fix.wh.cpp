@@ -2,7 +2,7 @@
 // @id              windows-11-file-explorer-styler-color-fix
 // @name            Windows 11 File Explorer Styler Color Fix
 // @description     Customize the File Explorer with themes contributed by others or create your own
-// @version         1.7.2.12
+// @version         1.7.2.13
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -11,6 +11,15 @@
 // @architecture    x86-64
 // @compilerOptions -lcomctl32 -ld2d1 -ldwmapi -lgdi32 -lmsimg32 -lole32 -loleaut32 -lruntimeobject -lshlwapi -luxtheme
 // ==/WindhawkMod==
+
+// Upstream sync (2026-11-22, Asia/Shanghai):
+// Repository: https://github.com/m417z/my-windhawk-mods
+// Branch: main
+// Path: mods/windows-11-file-explorer-styler.wh.cpp
+// Last merged file commit: 160a426ce14f071c3258b4d9c7c270f5653ad6d5
+// Commit time: 2026-11-20 12:34:28 +08:00
+// For the next sync, review changes to this path from that commit (exclusive)
+// through the latest main, then update this checkpoint.
 
 // Source code is published under The GNU General Public License v3.0.
 //
@@ -1814,7 +1823,7 @@ winrt::weak_ref<wf::IInspectable> TryMakeWeak(wf::IInspectable const& object)
 // it. UnregisterInstance closes the runtime object cached for a handle, the
 // only reference the diagnostics keep to an element once it was reported.
 static constexpr GUID IID_IXamlDiagnosticsTestHooks =
-    {0x735941a2, 0x3ee3, 0x495a, {0x8d, 0xa9, 0x97, 0x26, 0x27, 0x00, 0x30, 0x75}};
+    {0x7776037b, 0xcbbe, 0x4de1, {0xad, 0x6f, 0x0d, 0xbf, 0x1d, 0x58, 0x17, 0xb4}};
 
 struct IXamlDiagnosticsTestHooks : IUnknown
 {
@@ -1850,7 +1859,15 @@ public:
 
     void UnadviseVisualTreeChange();
 
-    bool ReleaseDiagnosticsReference(InstanceHandle handle);
+    enum class DiagnosticsReleaseResult
+    {
+        Failed,
+        Released,
+        ElementDestroyed,
+    };
+
+    DiagnosticsReleaseResult ReleaseDiagnosticsReference(InstanceHandle handle);
+    void TakeDiagnosticsReference(wf::IInspectable const& element);
 
 private:
     HRESULT STDMETHODCALLTYPE OnVisualTreeChange(ParentChildRelation relation, VisualElement element, VisualMutationType mutationType) override;
@@ -1921,10 +1938,11 @@ void VisualTreeWatcher::UnadviseVisualTreeChange()
 // Reports whether dropping the reference destroyed the element, which is what
 // tells the caller that the handle is free to name a different element from now
 // on and that the id recorded for this one has to go.
-bool VisualTreeWatcher::ReleaseDiagnosticsReference(InstanceHandle handle)
+VisualTreeWatcher::DiagnosticsReleaseResult
+VisualTreeWatcher::ReleaseDiagnosticsReference(InstanceHandle handle)
 {
     if (!m_XamlDiagnosticsTestHooks) {
-        return false;
+        return DiagnosticsReleaseResult::Failed;
     }
 
     winrt::weak_ref<wf::IInspectable> weakElement;
@@ -1947,12 +1965,24 @@ bool VisualTreeWatcher::ReleaseDiagnosticsReference(InstanceHandle handle)
     HRESULT hr = m_XamlDiagnosticsTestHooks->UnregisterInstance(handle);
     if (FAILED(hr)) {
         Wh_Log(L"UnregisterInstance failed with error %08X", hr);
-        return false;
+        return DiagnosticsReleaseResult::Failed;
     }
 
     // Not every reported object supports weak references, and then the release
     // just proceeds unobserved.
-    return weakElement && !weakElement.get();
+    return weakElement && !weakElement.get()
+               ? DiagnosticsReleaseResult::ElementDestroyed
+               : DiagnosticsReleaseResult::Released;
+}
+
+// This creates the runtime object if it is no longer cached.
+void VisualTreeWatcher::TakeDiagnosticsReference(wf::IInspectable const& element)
+{
+    InstanceHandle handle;
+    HRESULT hr = m_XamlDiagnostics->GetHandleFromIInspectable(reinterpret_cast<::IInspectable*>(winrt::get_abi(element)), &handle);
+    if (FAILED(hr)) {
+        Wh_Log(L"GetHandleFromIInspectable failed with error %08X", hr);
+    }
 }
 
 HRESULT VisualTreeWatcher::OnVisualTreeChange(ParentChildRelation relation, VisualElement element, VisualMutationType mutationType) try
@@ -9059,11 +9089,6 @@ constexpr ULONGLONG kDiagnosticsReleaseDrainDelay = 1;
 // Releasing an element the mod still records something for would strand that
 // recording, since no removal is reported for a handle whose runtime object is
 // gone. Such an element stays held, and its own removal releases it.
-//
-// Which leaves a styled element of a tree discarded whole held for good, and
-// with it everything below it, since a parent holds its children. Rules that
-// match File Explorer match almost nothing of such a tree, so what this retains
-// is small, but a rule written against a bare type would retain much more.
 bool ElementHasState(ElementId elementId) {
     if (elementId == ElementId::None) {
         return false;
@@ -9103,13 +9128,28 @@ void FlushDiagnosticsReleases() {
     std::sort(pending.begin(), pending.end());
     pending.erase(std::unique(pending.begin(), pending.end()), pending.end());
 
+    using ReleaseResult = VisualTreeWatcher::DiagnosticsReleaseResult;
+    bool released = false;
     for (InstanceHandle handle : pending) {
         if (ElementHasState(FindElementId(handle))) {
             continue;
         }
 
-        if (visualTreeWatcher->ReleaseDiagnosticsReference(handle)) {
+        auto result = visualTreeWatcher->ReleaseDiagnosticsReference(handle);
+        released |= result != ReleaseResult::Failed;
+        if (result == ReleaseResult::ElementDestroyed) {
             ForgetElementId(handle);
+        }
+    }
+
+    // Releasing an ancestor can drop a styled descendant's diagnostics object
+    // and prevent its removal report. Register each surviving styled element
+    // again so it has a diagnostics object of its own.
+    if (released) {
+        for (const auto& entry : g_elementsCustomizationState) {
+            if (auto element = entry.second.element.get()) {
+                visualTreeWatcher->TakeDiagnosticsReference(element);
+            }
         }
     }
 
